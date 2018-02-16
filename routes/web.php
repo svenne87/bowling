@@ -11,6 +11,11 @@
 |
 */
 
-Route::get('/', function () {
+
+Route::get('/', ['uses' => 'WelcomeController@index', 'as' => 'welcome_index'], function () { 
     return view('welcome');
+});
+
+Route::get('/match', ['uses' => 'Match\MatchController@index', 'as' => 'match_index'], function () {
+    return view('templates.match.index');
 });

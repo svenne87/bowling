@@ -48,6 +48,19 @@ class Handler extends ExceptionHandler
      */
     public function render($request, Exception $exception)
     {
+        if ($request->expectsJson()) {
+            return $this->renderJson($request, $exception);
+        }
+    
+        if($exception instanceof NotFoundHttpException)
+        {
+            return response()->view('/errors/404', [], 404);
+        }
+
+        if ($this->shouldReport($exception) && app()->environment('production')) {
+            $exception = new HttpException(500, $exception->getMessage(), $exception);
+        }
+
         return parent::render($request, $exception);
     }
 }
