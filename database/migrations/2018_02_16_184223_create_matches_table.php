@@ -17,6 +17,7 @@ class CreateMatchesTable extends Migration
             Schema::create('matches', function (Blueprint $table) {
                 $table->increments('id');
                 $table->string('name');
+                $table->string('unique_identifier');
                 $table->string('display_score')->nullable();
                 $table->integer('winner_player_id')->unsigned()->default(0);
                 $table->foreign('winner_player_id')->references('id')->on('players');

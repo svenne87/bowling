@@ -12,7 +12,7 @@ class Match extends Model
      * @var array
      */
     protected $fillable = [
-        'name', 'winner_player_id', 'display_score', 'start_datetime', 'end_datetime'
+        'name', 'winner_player_id', 'unique_identifier', 'display_score', 'start_datetime', 'end_datetime'
     ];
 
     /**
