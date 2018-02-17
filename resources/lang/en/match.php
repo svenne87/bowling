@@ -16,5 +16,6 @@ return [
     'one' => 'one',
     'two' => 'two',
     'start' => 'Start',
+    'action' => 'Roll',
 
 ];

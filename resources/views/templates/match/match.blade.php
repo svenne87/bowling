@@ -48,6 +48,21 @@
                     </div>
                 @endforeach
             </div>
+            <div class="row">
+                <div class="col-md-12 col-lg-10 offset-lg-1">
+                    <div class="action-container">
+                        {!! Form::model($match, [
+                            'method' => 'PATCH',
+                            'url' => ['/match', $match->id],
+                            'class' => 'form-horizontal'
+                        ]) !!}
+
+                            @include ('templates.match.action-form')
+                        
+                        {!! Form::close() !!}
+                    </div>
+                </div>
+            </div>
         @endif
     </div>
 </div>

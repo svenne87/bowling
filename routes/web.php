@@ -25,3 +25,5 @@ Route::get('/match/{matchId}', ['uses' => 'Match\MatchController@activeMatch', '
 });
 
 Route::post('/match', 'Match\MatchController@store');
+
+Route::patch('/match/{match_id}', 'Match\MatchController@update');

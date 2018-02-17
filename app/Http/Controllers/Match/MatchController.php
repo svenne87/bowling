@@ -32,17 +32,15 @@ class MatchController extends Controller
     {
         // Get the current Match
         $match = Match::findOrFail($matchId);
+        $status = $this->validateMatch($match, $request);
 
-        // Check if Match has ended
-        if (!empty($match->end_datetime)) {
-            return redirect('match')->with('error', Lang::get('errors.match_has_ended'));
-        }
-        
-        $unique_identifier = $request->session()->get('unique_identifier', '');
-
-        // Check if this Match belongs to our current Session
-        if (empty($unique_identifier) || $unique_identifier != $match->unique_identifier) {
-            return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
+        // Validate Match
+        if (!empty($status['error'])) {
+            if ($status['error'] == 'ended') {
+                return redirect('match')->with('error', Lang::get('errors.match_has_ended'));
+            } else if ($status['error'] == 'in_progress') {
+                return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
+            }
         }
 
         // Keep the result in a separate array to avoid calculations in the view
@@ -53,7 +51,7 @@ class MatchController extends Controller
                 $results[$player->id][$game->number] = $this->calculateResult($game, $player);
             });
         });
-        
+
         return view('templates.match.match', compact('match', 'results'));
     }
 
@@ -72,10 +70,10 @@ class MatchController extends Controller
         if ($request->get('player_one') == $request->get('player_two')) return redirect('match')->with('error', Lang::get('errors.different_names'));
 
         // Create our players
-        $playerOneValues = array('name' => trim($request->get('player_one')));
+        $playerOneValues = array('name' => trim($request->get('player_one')), 'unique_identifier' => md5(microtime() . trim($request->get('player_one'))));
         $playerOne = Player::create($playerOneValues); 
 
-        $playerTwoValues = array('name' => trim($request->get('player_two')));
+        $playerTwoValues = array('name' => trim($request->get('player_two')), 'unique_identifier' => md5(microtime() . trim($request->get('player_two'))));
         $playerTwo = Player::create($playerTwoValues); 
 
         $now = Carbon::now('Europe/Stockholm');
@@ -93,10 +91,43 @@ class MatchController extends Controller
         // Keep track of the Match identifier, just to prevent direct URL access for a Match in progress
         $request->session()->put('unique_identifier', $matchValues['unique_identifier']);
 
-          // Go to the Match
+        // Go to the Match
         return redirect()->route('active_match', ['match_id' => $match->id]);
     }
 
+    /**
+     * Update a resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     *
+     * @return void
+     */
+    public function update(Request $request, $matchId)
+    {
+        // Get the current Match
+        $match = Match::findOrFail($matchId);
+        $status = $this->validateMatch($match, $request);
+
+        // Validate Match
+        if (!empty($status['error'])) {
+            if ($status['error'] == 'ended') {
+                return redirect('match')->with('error', Lang::get('errors.match_has_ended'));
+            } else if ($status['error'] == 'in_progress') {
+                return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
+            }
+        }
+
+
+
+
+
+        // Go to the Match
+        return redirect()->route('active_match', ['match_id' => $match->id])->with('success', "xxx"); // Lang::get('errors.match_has_ended')
+    }
+
+    /**
+     * Set up a Match
+     */
     private function initializeMatch($match, $players) 
     {
         $numberOfFrames = 10;
@@ -128,6 +159,32 @@ class MatchController extends Controller
         }
     }
 
+    /**
+     * Check if Match is valid, session and if it has ended
+     */
+    private function validateMatch($match, $request)
+    {
+        $status = array('error' => '', 'message' => '');
+        // Check if Match has ended
+        if (!empty($match->end_datetime)) {
+            $status['error'] = 'ended';
+            $status['message'] = Lang::get('errors.match_has_ended');
+        }
+        
+        $unique_identifier = $request->session()->get('unique_identifier', '');
+
+        // Check if this Match belongs to our current Session
+        if (empty($unique_identifier) || $unique_identifier != $match->unique_identifier) {
+            $status['error'] = 'in_progress';
+            $status['message'] = Lang::get('errors.match_in_progress');
+        }
+
+        return $status;
+    }
+
+    /**
+     * Calculate Player result for a Game
+     */
     private function calculateResult($game, $player) 
     {
         $score = 0;
@@ -149,4 +206,80 @@ class MatchController extends Controller
 
         return $score;
     }
+
+    /**
+     * Perform a roll action
+     */
+    private function performRollAction($player, $gameRound) 
+    {
+
+    }
+
+    /**
+     * Check roll type
+     */
+    private function checkRoleType($thisGameRound, $previousGameRound = false) 
+    {
+        if ($thisGameRound->score == 10) {
+            // Make sure that last Roll not was a violation 
+            if ($previousGameRound != false && $previousGameRound->score < 0) {
+                // This counts as a "Spare" type = 1
+                return 1;
+            }
+            
+            // This is a "Strike", type = 2
+            return 2;     
+        }
+
+        if ($thisGameRound->score < 0) {
+            // This is a "Violation", type = 3
+            return 3;
+        }
+        
+        if ($previousGameRound != false) {
+            if ($thisGameRound->score + $previousGameRound->score == 10) {
+                // This is a "Spare" type = 1
+                return 1;
+            }
+        }
+
+        // Default "Regular" roll
+        return 0;
+    }
+   
+    // TODO use these rules...
+
+    /**
+     * Check if there is a bonus for roll type
+     */
+    private function checkIfBonus($roleType, $nextRoll, $nextNextRoll, $lastGame = false) 
+    {
+        $bonus = array('points' => 0, 'rolls' => 0);
+
+        switch($roleType) {
+            case 0:
+                // No bonus
+                break;
+            case 1:
+                // Spare gives a bonus of the points in next roll
+                $bonus['points'] = $nextRoll->score;
+
+                // Extra roll for the last Game
+                if ($lastGame == true) $bonus['rolls'] = 1; 
+                break;
+            case 2:
+                 // Strike gives a bonus of the points in next roll and next next roll
+                 $bonus['points'] = $nextRoll->score + $nextNextRoll->score;
+
+                // Extra roll for the last Game
+                if ($lastGame == true) $bonus['rolls'] = 1; 
+                break;
+            case 3:
+                // No bonus
+                break;
+        }
+
+        return $bonus;
+    }
+
 }
