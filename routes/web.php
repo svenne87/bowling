@@ -19,3 +19,9 @@ Route::get('/', ['uses' => 'WelcomeController@index', 'as' => 'welcome_index'], 
 Route::get('/match', ['uses' => 'Match\MatchController@index', 'as' => 'match_index'], function () {
     return view('templates.match.index');
 });
+
+Route::get('/match/{matchId}', ['uses' => 'Match\MatchController@activeMatch', 'as' => 'active_match'], function () {
+    return view('templates.match.match');
+});
+
+Route::post('/match', 'Match\MatchController@store');

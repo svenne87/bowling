@@ -12,5 +12,9 @@ return [
     | these language lines according to your application's requirements.
     |
     */
+    'player' => 'Player',
+    'one' => 'one',
+    'two' => 'two',
+    'start' => 'Start',
 
 ];
