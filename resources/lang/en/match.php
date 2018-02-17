@@ -17,5 +17,7 @@ return [
     'two' => 'two',
     'start' => 'Start',
     'action' => 'Roll',
+    'rolled' => 'rolled',
+    'match_ended' => 'This match has ended.',
 
 ];

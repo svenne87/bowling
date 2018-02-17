@@ -33,11 +33,12 @@ class MatchController extends Controller
         // Get the current Match
         $match = Match::findOrFail($matchId);
         $status = $this->validateMatch($match, $request);
-
+        $matchHasEnded = false;
+        
         // Validate Match
         if (!empty($status['error'])) {
             if ($status['error'] == 'ended') {
-                return redirect('match')->with('error', Lang::get('errors.match_has_ended'));
+                $matchHasEnded = true;
             } else if ($status['error'] == 'in_progress') {
                 return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
             }
@@ -48,11 +49,12 @@ class MatchController extends Controller
 
         $match->players->each(function($player) use ($match, &$results) {
             $match->games->each(function($game) use (&$results, $player) {
+                if (!isset($results[$player->id])) $results[$player->id] = array();
                 $results[$player->id][$game->number] = $this->calculateResult($game, $player);
             });
         });
 
-        return view('templates.match.match', compact('match', 'results'));
+        return view('templates.match.match', compact('match', 'results', 'matchHasEnded'));
     }
 
    /**
@@ -106,23 +108,101 @@ class MatchController extends Controller
     {
         // Get the current Match
         $match = Match::findOrFail($matchId);
+        $now = Carbon::now('Europe/Stockholm');
         $status = $this->validateMatch($match, $request);
-
+        
         // Validate Match
         if (!empty($status['error'])) {
             if ($status['error'] == 'ended') {
-                return redirect('match')->with('error', Lang::get('errors.match_has_ended'));
+                return redirect()->route('active_match', ['match_id' => $match->id]);
             } else if ($status['error'] == 'in_progress') {
                 return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
             }
         }
 
+        // Games sorted 1 - 10
+        $games = $match->games->sortBy('number');
 
+        // Get current Game
+        $currentGame = $games->filter(function ($game) {
+            if (empty($game->start_datetime) && empty($game->end_datetime)) {  
+                // First not started Game      
+                return $game;
+            } else if (!empty($game->start_datetime) && empty($game->end_datetime)) { 
+                // First active Game   
+                return $game;
+            }
+        })->first();
 
+        if (!$currentGame) {
+            // The Match is finished
+            $match->end_datetime = $now->format('Y-m-d H:i:s');
+            $match->save();
+            return redirect()->route('active_match', ['match_id' => $match->id]);
+        }
 
+        // Get all GameRounds, for current Game
+        $gameRounds = $currentGame->gameRounds;
 
-        // Go to the Match
-        return redirect()->route('active_match', ['match_id' => $match->id])->with('success', "xxx"); // Lang::get('errors.match_has_ended')
+        // Player GameRound's in array for easy access, they are sorted 1 - 2 (3) already
+        $playerRounds = array();
+        $gameStarted = false;
+
+        $match->players->each(function($player) use (&$playerRounds, &$gameStarted , $gameRounds) {
+            if (!isset($playerRounds[$player->id])) $playerRounds[$player->id] = array();
+            
+            $gameRounds->filter(function ($gameRound) use (&$playerRounds, &$gameStarted , $player) {           
+                if ($gameRound->player_id == $player->id) {
+                    $playerRounds[$player->id][$gameRound->number] = $gameRound;
+                }
+
+                // Check if Game is started
+                if ($gameRound->created_at != $gameRound->updated_at) $gameStarted = true;
+            });
+        });
+       
+        if (!$gameStarted && $currentGame->number == 1) {
+            // This is the first GameRound of the first Game, shuffle a Player that starts
+            $currentPlayerId = $this->shufflePlayer($playerRounds); 
+
+            // Find active round, pass in array since function expects array in array
+            $activeRounds = $playerRounds[$currentPlayerId];
+            $currentGameRound = $this->findActiveGameRound(array($activeRounds));
+        } else {
+            // Find active round
+            $currentGameRound = $this->findActiveGameRound($playerRounds);
+        }
+
+        // Try to find previous GameRound
+        $previousGameRound = $this->findPreviousGameRound($playerRounds, $currentGameRound);
+   
+        $currentGameRound = $this->performRollAction($currentGameRound, $previousGameRound);
+        $currentGameRound->touch(); // touch will ensure update even if we score 0
+        $currentGameRound->save();
+
+        // Set the Game as started
+        if (empty($currentGame->start_datetime)) {
+            $currentGame->start_datetime = $now->format('Y-m-d H:i:s');
+            $currentGame->save();
+        }
+
+        // Check if all GameRounds are played
+        $gameFinished = $this->gameIsFinished($gameRounds);
+        if ($gameFinished == true) {
+            $currentGame->end_datetime = $now->format('Y-m-d H:i:s');
+            $currentGame->save();
+        }
+
+        // TODO Present more details...
+        // TODO calculate results and handle spare, strike etc.
+        // TODO Set correct type
+        // TODO Skip the last "Roll" to see "Match has ended"...
+        // checkRoleType($thisGameRound, $previousGameRound = false) 
+
+        $message = sprintf("%s %s: %d.", $currentGameRound->player->name, Lang::get('match.rolled'), $currentGameRound->score);
+
+        // Go back to the Match
+        return redirect()->route('active_match', ['match_id' => $match->id])->with('success', $message);
     }
 
     /**
@@ -183,6 +263,71 @@ class MatchController extends Controller
     }
 
     /**
+     * Shuffle a starting Player
+     */
+    private function shufflePlayer($playerRounds) 
+    {
+        $minPlayersKey = min(array_keys($playerRounds));
+        $maxPlayersKey =  max(array_keys($playerRounds));
+        return random_int($minPlayersKey, $maxPlayersKey);
+    }
+
+    /**
+     * Get active GameRound
+     */
+    private function findActiveGameRound($playerRounds) 
+    {
+        foreach($playerRounds as $key => $number) {
+            foreach($number as $gameRound) {
+                // First not modified GameRound
+                if ($gameRound->created_at == $gameRound->updated_at) return $gameRound;
+            }
+        } 
+
+        return false;
+    }
+
+    /**
+     * Get previous GameRound
+     */
+    private function findPreviousGameRound($playerRounds, $currentGameRound) 
+    {   
+        // Previous Game Round will be this number - 1
+        $previousGameRoundNumber = ($currentGameRound->number - 1);
+
+        // Current Player GameRounds
+        $currentPlayerRounds = $playerRounds[$currentGameRound->player_id];
+
+        // Check if there is a updated GameRound 
+        if (isset($currentPlayerRounds[$previousGameRoundNumber])) {
+            $previousGameRound = $currentPlayerRounds[$previousGameRoundNumber];
+
+            if ($previousGameRound->created_at != $previousGameRound->updated_at) {
+                return $previousGameRound;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if all GameRounds in Game have been played
+     */
+    private function gameIsFinished($gameRounds) 
+    {
+        $gameRounds->filter(function ($gameRound) use (&$result) {
+            if ($gameRound->created_at == $gameRound->updated_at) {
+                $result = false;
+                return;
+            } else {
+                $result = true;
+            }
+        });
+
+        return $result;
+    }
+
+    /**
      * Calculate Player result for a Game
      */
     private function calculateResult($game, $player) 
@@ -210,9 +355,17 @@ class MatchController extends Controller
     /**
      * Perform a roll action
      */
-    private function performRollAction($player, $gameRound) 
+    private function performRollAction(&$gameRound, $previousGameRound = false) 
     {
+        // TODO perhaps we should include violation?
+        $minValue = 0;
+        $maxValue = 10;
 
+        // There is a previous round, the new max will need to be adjusted
+        if ($previousGameRound) $maxValue  = ($maxValue - $previousGameRound->score);
+
+        $gameRound->score = random_int($minValue, $maxValue);
+        return $gameRound;
     }
 
     /**

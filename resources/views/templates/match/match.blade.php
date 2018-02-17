@@ -50,17 +50,23 @@
             </div>
             <div class="row">
                 <div class="col-md-12 col-lg-10 offset-lg-1">
-                    <div class="action-container">
-                        {!! Form::model($match, [
-                            'method' => 'PATCH',
-                            'url' => ['/match', $match->id],
-                            'class' => 'form-horizontal'
-                        ]) !!}
+                    @if (!$matchHasEnded)
+                        <div class="action-container">
+                            {!! Form::model($match, [
+                                'method' => 'PATCH',
+                                'url' => ['/match', $match->id],
+                                'class' => 'form-horizontal'
+                            ]) !!}
 
-                            @include ('templates.match.action-form')
+                                @include ('templates.match.action-form')
                         
-                        {!! Form::close() !!}
-                    </div>
+                            {!! Form::close() !!}
+                        </div>
+                    @else
+                        <div class="match-result-details-container">
+                            <p class="text-muted text-center">{{ Lang::get('match.match_ended') }}</p>
+                        </div>
+                    @endif
                 </div>
             </div>
         @endif
