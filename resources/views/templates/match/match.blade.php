@@ -28,7 +28,21 @@
                                                     @if ($gameRound->created_at == $gameRound->updated_at)
                                                         <td>&emsp;</td>
                                                     @else
-                                                        <td>{{ $gameRound->score }}</td>
+                                                        @if ($gameRound->type == 0)
+                                                            @if ($gameRound->score == 0)
+                                                                <td>-</td>
+                                                            @else
+                                                            <td>{{ $gameRound->score }}</td>
+                                                            @endif
+                                                        @elseif ($gameRound->type == 1)
+                                                            <td>/</td>
+                                                        @elseif ($gameRound->type == 2)
+                                                            <td>X</td>
+                                                        @elseif ($gameRound->type == 3)
+                                                            <td>F</td>
+                                                        @elseif ($gameRound->type == 4)
+                                                            <td>&emsp;</td>
+                                                        @endif
                                                     @endif
                                                 @endif
                                             @endforeach

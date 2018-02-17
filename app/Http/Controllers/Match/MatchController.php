@@ -48,9 +48,17 @@ class MatchController extends Controller
         $results = array();
 
         $match->players->each(function($player) use ($match, &$results) {
-            $match->games->each(function($game) use (&$results, $player) {
+            $totalScore = 0;
+
+            $match->games->each(function($game) use (&$results, &$totalScore, $player) {
                 if (!isset($results[$player->id])) $results[$player->id] = array();
-                $results[$player->id][$game->number] = $this->calculateResult($game, $player);
+
+                // Increase the score if we are not showing default symbol instead of score.
+                $score = $this->getResult($game, $player);
+                $totalScore += (is_numeric($score) ? $score : 0); 
+
+                // Make sure space symbol get's shown before Match starts
+                $results[$player->id][$game->number] = (is_numeric($score) ? $totalScore : $score);
             });
         });
 
@@ -165,8 +173,11 @@ class MatchController extends Controller
             // This is the first GameRound of the first Game, shuffle a Player that starts
             $currentPlayerId = $this->shufflePlayer($playerRounds); 
 
-            // Find active round, pass in array since function expects array in array
+            // Find active GameRound, pass in array since function expects array in array
             $activeRounds = $playerRounds[$currentPlayerId];
+           
+            // TODO issue when player two starts...
+
             $currentGameRound = $this->findActiveGameRound(array($activeRounds));
         } else {
             // Find active round
@@ -177,8 +188,13 @@ class MatchController extends Controller
         $previousGameRound = $this->findPreviousGameRound($playerRounds, $currentGameRound);
    
         $currentGameRound = $this->performRollAction($currentGameRound, $previousGameRound);
-        $currentGameRound->touch(); // touch will ensure update even if we score 0
+        
+        // Touch will ensure update even if we score 0
+        $currentGameRound->touch(); 
         $currentGameRound->save();
+
+        // Check and handle if "Strike", or last GameRound
+        $this->checkAndHandleNextGameRound($playerRounds, $currentGameRound);
 
         // Set the Game as started
         if (empty($currentGame->start_datetime)) {
@@ -193,13 +209,17 @@ class MatchController extends Controller
             $currentGame->save();
         }
 
+        // TODO Will need to refetch gameRounds here?? If strike at end?
         // TODO Present more details...
-        // TODO calculate results and handle spare, strike etc.
-        // TODO Set correct type
-        // TODO Skip the last "Roll" to see "Match has ended"...
-        // checkRoleType($thisGameRound, $previousGameRound = false) 
+        // TODO Skip the last "Roll" to see "Match has ended"...  !$currentGame, gör en annan koll innan vi retunerar här nere.
+        // TODO set Match winner
+        // TODO will cover if all is Strike?, missinh 70 points? Issiue wit hseveral strikes in a row...
+        // TODO test if all is Spare
+        // TODO could be done more elegant...
+        // Test if last roll should be locked, is i
+        // Bugg om spelar nere börjar??
 
-        $message = sprintf("%s %s: %d.", $currentGameRound->player->name, Lang::get('match.rolled'), $currentGameRound->score);
+        $message = sprintf("%s %s: %s.", $currentGameRound->player->name, Lang::get('match.rolled'), $this->getRollMessage($currentGameRound));
 
         // Go back to the Match
         return redirect()->route('active_match', ['match_id' => $match->id])->with('success', $message);
@@ -271,7 +291,7 @@ class MatchController extends Controller
     }
 
     /**
-     * Get active GameRound
+     * Get active GameRound, for this Game
      */
     private function findActiveGameRound($playerRounds) 
     {
@@ -280,13 +300,12 @@ class MatchController extends Controller
                 // First not modified GameRound
                 if ($gameRound->created_at == $gameRound->updated_at) return $gameRound;
             }
-        } 
-
+        }
         return false;
     }
 
     /**
-     * Get previous GameRound
+     * Get previous GameRound, for this Game
      */
     private function findPreviousGameRound($playerRounds, $currentGameRound) 
     {   
@@ -303,6 +322,25 @@ class MatchController extends Controller
             if ($previousGameRound->created_at != $previousGameRound->updated_at) {
                 return $previousGameRound;
             }
+        }
+
+        return false;
+    }
+
+    /**
+     * Get next GameRound, for this Game
+     */
+    private function findNextGameRound($playerRounds, $currentGameRound) 
+    {   
+        // Next Game Round will be this number + 1
+        $nextGameRoundNumber = ($currentGameRound->number + 1);
+
+        // Current Player GameRounds
+        $currentPlayerRounds = $playerRounds[$currentGameRound->player_id];
+
+        // Check if there is a next GameRound 
+        if (isset($currentPlayerRounds[$nextGameRoundNumber])) {
+            return $currentPlayerRounds[$nextGameRoundNumber];
         }
 
         return false;
@@ -326,9 +364,9 @@ class MatchController extends Controller
     }
 
     /**
-     * Calculate Player result for a Game
+     * Get Player result for a Game
      */
-    private function calculateResult($game, $player) 
+    private function getResult($game, $player) 
     {
         $score = 0;
 
@@ -337,8 +375,6 @@ class MatchController extends Controller
             if ($round->player_id == $player->id) {
                 // The score is not default
                 if ($round->created_at != $round->updated_at) {
-                    // TODO handle strike, spare, violation
-
                     $score += $round->score;
                 } else {
                      // Empty space default
@@ -353,9 +389,10 @@ class MatchController extends Controller
     /**
      * Perform a roll action
      */
-    private function performRollAction(&$gameRound, $previousGameRound = false) 
+    private function performRollAction(&$gameRound, &$previousGameRound = false) 
     {
         // TODO perhaps we should include violation?
+
         $minValue = 0;
         $maxValue = 10;
 
@@ -363,13 +400,78 @@ class MatchController extends Controller
         if ($previousGameRound) $maxValue  = ($maxValue - $previousGameRound->score);
 
         $gameRound->score = random_int($minValue, $maxValue);
+
+        // TODO TEST
+         $gameRound->score = $this->testIt($gameRound, 1);
+        // TODO END TEST
+
+        // Check if "Spare", "Strike", "Violation" or "Regular"
+        $gameRound->type = $this->getRollType($gameRound, $previousGameRound);
+
+        // Check if we received any bonuses and collect these points
+        // These point will be awarded to previous Game
+        $this->checkAndAwardBonus($gameRound);
+
         return $gameRound;
+    }
+
+    /**
+     * Check and handle next GameRound, if there is one.
+     */
+    function checkAndHandleNextGameRound($playerRounds, $currentGameRound)
+    {    
+        $nextGameRound = $this->findNextGameRound($playerRounds, $currentGameRound);
+        $lockNextGameRound = false;
+
+        // Check if this is the last Game
+        if ($currentGameRound->game->number == 10) {
+            if ($currentGameRound->number > 1) {
+                $previousGameRound = $this->findPreviousGameRound($playerRounds, $currentGameRound);
+                // If this is not a Spare and the first GameRound was not a Strike
+                // We should "lock" the last GameRound
+                // Since we are checking GameRound->number > 1, previosGameRound will exist
+                // A "Spare" och current GameRound or a "Strike" on previous or current GameRound would leave next GameRound open
+                if ($currentGameRound->type != 1 && $currentGameRound->type != 2 && $previousGameRound->type != 2) {
+                    $lockNextGameRound = true;
+                }
+            }
+        } else {
+            if ($currentGameRound->type == 2) {
+                // If the type for this GameRole is "Strike"
+                $lockNextGameRound = true;
+            }
+        }
+
+        if ($lockNextGameRound == true) {
+            // We should "lock" next GameRound, if there is one
+            if ($nextGameRound) {
+                $nextGameRound->type = 4;
+                $nextGameRound->save();
+            } 
+        }
+    }
+
+    /**
+     * Return message for roll
+     */
+    private function getRollMessage($currentGameRound)
+    {
+        switch ($currentGameRound->type) {
+            case 0:
+                return $currentGameRound->score;
+            case 1:
+                return Lang::get('match.spare');
+            case 2:
+                return Lang::get('match.strike');
+            case 3:
+                return Lang::get('match.violation');
+        }
     }
 
     /**
      * Check roll type
      */
-    private function checkRoleType($thisGameRound, $previousGameRound = false) 
+    private function getRollType($thisGameRound, $previousGameRound = false) 
     {
         if ($thisGameRound->score == 10) {
             // Make sure that last Roll not was a violation 
@@ -397,40 +499,267 @@ class MatchController extends Controller
         // Default "Regular" roll
         return 0;
     }
-   
-    // TODO use these rules...
 
     /**
-     * Check if there is a bonus for roll type
+     * Check if there is any bonus to award to previous Game
      */
-    private function checkIfBonus($roleType, $nextRoll, $nextNextRoll, $lastGame = false) 
+    function checkAndAwardBonus($gameRound)  
     {
-        $bonus = array('points' => 0, 'rolls' => 0);
+        $thisGameNumber = $gameRound->game->number;
+        $allGames = $gameRound->game->match->games;
+        $previousWasStrike = false;
 
-        switch($roleType) {
-            case 0:
-                // No bonus
-                break;
-            case 1:
-                // Spare gives a bonus of the points in next roll
-                $bonus['points'] = $nextRoll->score;
+        // Find previous Game
+        $previousGame = $allGames->firstWhere('number', ($thisGameNumber - 1));
 
-                // Extra roll for the last Game
-                if ($lastGame == true) $bonus['rolls'] = 1; 
-                break;
-            case 2:
-                 // Strike gives a bonus of the points in next roll and next next roll
-                 $bonus['points'] = $nextRoll->score + $nextNextRoll->score;
+        if ($previousGame) {
+            $gameRoundsForPlayer = $previousGame->gameRounds->where('player_id', $gameRound->player_id);
 
-                // Extra roll for the last Game
-                if ($lastGame == true) $bonus['rolls'] = 1; 
-                break;
-            case 3:
-                // No bonus
-                break;
+            $gameRoundsForPlayer->each(function(&$item) use ($gameRound) {
+                if ($item->type == 1) {
+                    // "Spare"
+                    if ($gameRound->number == 1) {
+                        // Award score for this roll
+                        $item->score += $gameRound->score;
+                        $item->save();
+                    }
+                } else if ($item->type == 2) {
+                    // "Strike"
+                    $previousWasStrike = true;
+                    if ($gameRound->number <= 2) { 
+                        // Award score for these roll's
+                        $item->score += $gameRound->score;
+                        $item->save();
+                    }
+                }
+            });
         }
 
-        return $bonus;
+        // TODO clean up, will also need to chewck if strik. not working for test 2) 
+        if ($previousGame) {
+            // Find previous, previous Game
+            $previousPreviousGame = $allGames->firstWhere('number', ($previousGame->number - 2));
+
+            if ($previousPreviousGame) {
+                $gameRoundsForPlayer = $previousPreviousGame->gameRounds->where('player_id', $gameRound->player_id);
+    
+                $gameRoundsForPlayer->each(function(&$item) use ($gameRound, $previousGame) {
+                    if ($item->type == 2) {
+                        // "Strike"
+                        if ($gameRound->number <= 2) {  // 1  
+                            // Award score for these roll's
+                            $item->score += $gameRound->score;
+                            $item->save();
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    private function testIt(&$gameRound, $test) 
+    {
+        if ($test == 1) {
+            switch ($gameRound->game->number) {
+                case 1:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 7;
+                    } else {
+                        $gameRound->score = 2;
+                    }    
+                    break;         
+                case 2:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 9;
+                    } else {
+                        $gameRound->score = 1;
+                    } 
+                    break;
+                case 3:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 4:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 9;
+                    } else {
+                        $gameRound->score = 0;
+                    } 
+                    break;
+                case 5:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 7;
+                    } else {
+                        $gameRound->score = 3;
+                    }
+                    break;
+                case 6:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 7;
+                    } else {
+                        $gameRound->score = 2;
+                    }
+                    break;
+                case 7:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 8;
+                    } else {
+                        $gameRound->score = 2; 
+                    }
+                    break;
+                case 8:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 9:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 10:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 6;
+                    } else if ($gameRound->number == 2) {
+                        $gameRound->score = 4;
+                    } else {
+                        $gameRound->score = 7;
+                    }
+                    break;
+            }
+             // 9 29 48 57 74 83 103 129 149 166
+        } else if ($test == 2) {
+            switch ($gameRound->game->number) {
+                case 1:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 6;
+                    } else {
+                        $gameRound->score = 2;
+                    }    
+                    break;         
+                case 2:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 8;
+                    } else {
+                        $gameRound->score = 2;
+                    } 
+                    break;
+                case 3:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 4:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 9;
+                    } else {
+                        $gameRound->score = 0;
+                    } 
+                    break;
+                case 5:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 6;
+                    } else {
+                        $gameRound->score = 4;
+                    }
+                    break;
+                case 6:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 8;
+                    } else {
+                        $gameRound->score = 1;
+                    }
+                    break;
+                case 7:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 9;
+                    } else {
+                        $gameRound->score = 1;
+                    }
+                    break;
+                case 8:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 9:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 10:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 8;
+                    } else if ($gameRound->number == 2) {
+                        $gameRound->score = 2;
+                    } else {
+                        $gameRound->score = 7;
+                    }
+                    break;
+            }
+            // 8 28 47 56 74 83 103 131 151 168
+        } else if ($test == 3) {
+            switch ($gameRound->game->number) {
+                case 1:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }   
+                    break;         
+                case 2:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    } 
+                    break;
+                case 3:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 4:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    } 
+                    break;
+                case 5:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    } 
+                    break;
+                case 6:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 7:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 8:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 9:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+                case 10:
+                    if ($gameRound->number == 1) {
+                        $gameRound->score = 10;
+                    } else if ($gameRound->number == 2) {
+                        $gameRound->score = 10;
+                    } else if ($gameRound->number == 3) {
+                        $gameRound->score = 10;
+                    }
+                    break;
+
+                    // Maxpoängen man kan få på en serie är 300 p. och det är 12 st strikar på rad.
+            }
+        }
+        return $gameRound->score;
     }
 
 }

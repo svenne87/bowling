@@ -15,6 +15,8 @@ class GameRound extends Model
         'name', 'number', 'game_id', 'player_id', 'score', 'type'
     ];
 
+    /* type : '0 = regular, 1 = spare, 2 = strike, 3 = violation. 4 = no_action */
+
     /**
      * A GameRound have single Game.
      *
