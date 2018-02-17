@@ -244,17 +244,15 @@ class MatchController extends Controller
      */
     private function validateMatch($match, $request)
     {
+        $unique_identifier = $request->session()->get('unique_identifier', '');
         $status = array('error' => '', 'message' => '');
-        // Check if Match has ended
+        
         if (!empty($match->end_datetime)) {
+            // Check if Match has ended
             $status['error'] = 'ended';
             $status['message'] = Lang::get('errors.match_has_ended');
-        }
-        
-        $unique_identifier = $request->session()->get('unique_identifier', '');
-
-        // Check if this Match belongs to our current Session
-        if (empty($unique_identifier) || $unique_identifier != $match->unique_identifier) {
+        } else if (empty($unique_identifier) || $unique_identifier != $match->unique_identifier) {
+            // Check if this Match belongs to our current Session
             $status['error'] = 'in_progress';
             $status['message'] = Lang::get('errors.match_in_progress');
         }
