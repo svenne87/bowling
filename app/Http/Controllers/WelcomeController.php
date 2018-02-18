@@ -14,7 +14,7 @@ class WelcomeController extends Controller
      */
     public function index()
     {
-        $perPage = 10;
+        $perPage = 20;
         $matches = Match::orderBy('winner_score', 'DESC')->paginate($perPage);
         return view('templates.welcome.index', compact('matches'));
     }
