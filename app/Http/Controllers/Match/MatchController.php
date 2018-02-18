@@ -422,6 +422,9 @@ class MatchController extends Controller
             })->first();
 
             $match->setWinner($winner, $playerResults[$winner->id]);
+        } else {
+            // Tied, just make sure this is set.
+            $match->winner_score = array_values($playerResults)[0];
         }
 
         // We only handle two players, set winner and final score
@@ -534,7 +537,7 @@ class MatchController extends Controller
             return 3;
         }
         
-        // Check if type = 2 to fixk bugg in last GameRound.
+        // Check if type = 2 to fix bugg in last GameRound.
         if ($previousGameRound != false && $previousGameRound->type != 2) {
             if ($thisGameRound->score + $previousGameRound->score == 10) {
                 // This is a "Spare" type = 1
