@@ -2,7 +2,7 @@
 @section('content')
 <div class="container h-100">
     <div class="row h-100 justify-content-center align-items-center">
-        <div class="col-md-8 md-offset-2">
+        <div class="col-lg-8 lg-offset-2">
             @if($matches->count())
                 <h2 class="text-center">{{ Lang::get('basic.highscore') }}</h2>   
                 <div class="table-container">
@@ -33,6 +33,9 @@
                         </table>
                     </div>
                     <div class="pagination"> {!! $matches->render() !!} </div>
+                </div>
+                <div class="text-center">
+                    <a class="btn btn-primary mt-5 px-5 mb-5" href="{{ url('/match') }}" title="{{ Lang::get('basic.play') }}">{{ Lang::get('basic.play') }}</a>
                 </div>
             @endif
         </div>

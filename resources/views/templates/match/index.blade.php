@@ -1,8 +1,8 @@
 @extends('welcome')
 @section('content')
-<div class="container">
-    <div class="row">
-        <div class="col-md-12">
+<div class="container h-100">
+    <div class="row h-100 justify-content-center align-items-center">
+        <div class="col-lg-8 lg-offset-2">
             {!! Form::open(['url' => '/match', 'class' => 'form-horizontal']) !!}
 
                 @include ('templates.match.form')

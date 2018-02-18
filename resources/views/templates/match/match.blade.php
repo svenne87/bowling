@@ -3,18 +3,18 @@
 <div class="container">
     <div class="row">
         <div class="col-md-12">
-            <h1 class="text-center">{{ $match->name }}<h1>
+            <h2 class="text-center">{{ $match->name }}</h2>
         </div>
     </div>
     <div class="match-info-container">
         @if ($match->players->count() > 1)
             <div class="row">
                 @foreach ($match->players as $player)
-                    <div class="col-md-12 col-lg-10 offset-lg-1">
+                    <div class="col-md-12 col-lg-6">
                         <div class="player-info-container">
                             <h3 class="text-center">{{ $player->name }}</h3>
                             <div class="table-responsive">
-                                <table class="table table-bordered">
+                                <table class="table table-bordered score-table">
                                     <tbody>
                                         <tr class="text-center"> 
                                             @foreach ($match->games as $game) 

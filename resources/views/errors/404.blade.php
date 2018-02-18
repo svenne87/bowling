@@ -18,17 +18,31 @@
         <!-- End of Styles -->
     </head>
     <body class="app flex-row align-items-center">
-        <div class="container">
-            <div class="row justify-content-center">
-                <div class="col-md-6">
-                    <div class="clearfix">
-                        <h1 class="float-left display-3 mr-4">{{ Lang::get('error.404') }}</h1>
-                        <h4 class="pt-3">{{ Lang::get('error.404_title') }}</h4>
-                        <p>{{ Lang::get('error.404_message') }}</p>
+        @include('partials.header')
+
+        <div class="mt-5 wrapper">
+            <!-- Main content -->
+            <main class="main py-5">
+                <!-- Content -->
+                <div class="content">   
+                    <div class="animated fadeIn">   
+                        <div class="container h-100">
+                            <div class="row h-100 justify-content-center align-items-center">
+                                <div class="col-lg-8 lg-offset-2">
+                                    <div class="clearfix">
+                                        <h1 class="float-left display-3 mr-4">{{ Lang::get('errors.404') }}</h1>
+                                        <h4 class="pt-3">{{ Lang::get('errors.404_title') }}</h4>
+                                        <p>{{ Lang::get('errors.404_message') }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+                <!-- Content -->
+            </main>
         </div>
+        @include('partials.footer')  
 
         <!-- Scripts -->
             @include('partials.scripts')

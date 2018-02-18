@@ -16,6 +16,8 @@
 </div>
 <div class="form-group row mb-0">
     <div class="col-md-12 text-center">
-        {!! Form::submit(Lang::get('match.start'), ['class' => 'btn btn-primary px-4']) !!}
+        {{ Form::button('<i class="fa fa-bowling-ball"></i>' .' '. Lang::get('match.start'), ['type' => 'submit', 'class' => 'btn btn-primary px-5 mt-4'] )  }}
     </div>
 </div>
+
+

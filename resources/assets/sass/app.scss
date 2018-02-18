@@ -8,16 +8,77 @@
 // Bootstrap
 @import '~bootstrap/scss/bootstrap';
 
-.navbar-laravel {
-  background-color: #fff;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
-}
-
 html, body {
-  background-color: #fff;
-  color: #636b6f;
+  background-color: $white;
+  color: $dark-grey;
   font-family: 'Raleway', sans-serif;
   font-weight: 100;
   height: 100vh;
   margin: 0;
+}
+.wrapper {
+  min-height: 100%;
+  height: auto;
+  /* Negative indent footer by its height */
+  margin: 0 auto -11rem;
+  /* Pad bottom by footer height */
+  padding: 0 0 11rem;
+}
+.app-footer {
+  height: 11rem;
+}
+.btn-primary {
+  border-radius: 0px;
+}
+.btn-secondary {
+  color: $white;
+  background-color: transparent;
+  border-color: $white;
+  border-radius: 0px;
+}
+.btn-secondary:hover {
+  color: $white;
+  background-color: transparent;
+  border-color: $white;
+}
+.bg-secondary {
+  background-color: $blue-dark!important;
+}
+.logo-icon {
+  display: block;
+  color: $white;
+  text-align: center;
+  font-size: 2rem;
+}
+.pagination {
+  margin: auto;
+}
+.form-control {
+  border-radius: 0px !important;
+}
+.input-group-addon {
+  padding-left: 2rem;
+  padding-right: 2rem;
+  background-color: $primary-blue;
+  line-height: 2.2rem;
+  color: $white;
+}
+.score-table td, .score-table th {
+  padding: .3rem;
+}
+.alert-success {
+  border-radius: 0px;
+  background-color: $primary-green;
+  color: $white;
+  border: 1px solid $green-500;
+}
+.alert-danger {
+  border-radius: 0px;
+  background-color: $primary-red;
+  color: $white;
+  border: 1px solid $red-500;
+}
+.alert button {
+  color: $white;
+  opacity: 1;
 }

@@ -17,12 +17,12 @@
         @yield('styles')
         <!-- End of Styles -->
     </head>
-    <body class="app">
+    <body class="app flex-row align-items-center">
         @include('partials.header')
 
-        <div class="app-body">
+        <div class="mt-5 wrapper">
             <!-- Main content -->
-            <main class="main">
+            <main class="main py-5">
                 <!-- Content -->
                 <div class="content">   
                     <div class="animated fadeIn">   

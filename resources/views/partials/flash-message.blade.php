@@ -1,6 +1,6 @@
 <div class="container">
     <div class="row">
-        <div class="col-md-12">
+        <div class="offset-lg-2 col-lg-8 pb-2">
             @if ($message = Session::get('success'))
                 <div class="alert alert-success alert-block">
 	                <button type="button" class="close" data-dismiss="alert">×</button>	

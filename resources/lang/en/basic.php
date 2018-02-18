@@ -12,6 +12,14 @@ return [
     | these language lines according to your application's requirements.
     |
     */
-    'welcome' => 'Welcome'
-
+    'welcome' => 'Welcome',
+    'play' => 'Play',
+    'highscore' => 'Highscore',
+    'score' => 'Score',
+    'ranking' => 'Ranking',
+    'match' => 'Match',
+    'started' => 'Started',
+    'ended' => 'Ended',
+    'winner' => 'Winner',
+    'tied' => 'Tied',
 ];
