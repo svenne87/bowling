@@ -9,6 +9,7 @@ These instructions will get you a copy of the project up and running on your loc
 ### Prerequisites
 
 [Composer](https://getcomposer.org/)
+[Pusher](https://pusher.com/)
 [Laravel](https://laravel.com/docs/5.6#server-requirements)
 
 ### Installing
