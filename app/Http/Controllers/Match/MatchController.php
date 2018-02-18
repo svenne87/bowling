@@ -5,11 +5,14 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 
 use Lang;
+use Event;
 use Carbon\Carbon;
 use App\Player;
 use App\Match;
 use App\Game;
 use App\GameRound;
+use App\Events\UserRolled;
+
 
 class MatchController extends Controller
 {
@@ -28,11 +31,11 @@ class MatchController extends Controller
      *
      * @return void
      */
-    public function activeMatch(Request $request, $matchId)
+    public function activeMatch(Request $request, $matchId, $playerIdentifier = false)
     {
         // Get the current Match
         $match = Match::findOrFail($matchId);
-        $status = $this->validateMatch($match, $request);
+        $status = $this->validateMatch($match, $request, $playerIdentifier);
         $matchHasEnded = false;
         
         // Validate Match
@@ -44,9 +47,48 @@ class MatchController extends Controller
             }
         }
 
+        $currentPlayer = $match->startingPlayer;
+        $activePlayer = $match->players->filter(function($item) use($playerIdentifier) {
+            return $item->unique_identifier == $playerIdentifier;
+        })->first();
+
+        if (!$matchHasEnded) {
+            // Games sorted 1 - 10
+            $games = $match->games->sortBy('number');
+
+            // Get current Game
+            $currentGame = $games->filter(function ($game) {
+                if (empty($game->start_datetime) && empty($game->end_datetime)) {  
+                    // First not started Game      
+                    return $game;
+                } else if (!empty($game->start_datetime) && empty($game->end_datetime)) { 
+                    // First active Game   
+                    return $game;
+                }
+            })->first();
+
+            // Get all GameRounds, for current Game
+            $gameRounds = $currentGame->gameRounds;
+
+            if (!isset($playerRounds[$match->startingPlayer->id])) $playerRounds[$match->startingPlayer->id] = array();
+
+            $match->players->each(function($player) use (&$playerRounds, $gameRounds) {
+                if (!isset($playerRounds[$player->id])) $playerRounds[$player->id] = array();
+            
+                $gameRounds->filter(function($gameRound) use (&$playerRounds, $player) {           
+                    if ($gameRound->player_id == $player->id) {
+                        $playerRounds[$player->id][$gameRound->number] = $gameRound;
+                    }
+                });
+            });
+
+            $currentGameRound = $this->findActiveGameRound($playerRounds); 
+            $currentPlayer = $currentGameRound->player;
+        }
+
         // Keep the result in a separate array to avoid calculations in the view
         $results = $this->getMatchResults($match);
-        return view('templates.match.match', compact('match', 'results', 'matchHasEnded'));
+        return view('templates.match.match', compact('match', 'results', 'matchHasEnded', 'currentPlayer', 'activePlayer', 'playerIdentifier'));
     }
 
    /**
@@ -101,7 +143,9 @@ class MatchController extends Controller
         // Get the current Match
         $match = Match::findOrFail($matchId);
         $now = Carbon::now('Europe/Stockholm');
-        $status = $this->validateMatch($match, $request);
+        $playerIdentifier = $request->get('player_identifier');
+
+        $status = $this->validateMatch($match, $request, $playerIdentifier);
         
         // Validate Match
         if (!empty($status['error'])) {
@@ -132,21 +176,7 @@ class MatchController extends Controller
         // Player GameRound's in array for easy access, they are sorted 1 - 2 (3) already
         $playerRounds = array();
         $gameStarted = false;
-
-        // First Game and first set of GameRounds
-        if ($currentGame->number == 1) {
-            // Shuffle a Player that starts
-            $startingPlayerId = $this->shufflePlayer($match->players);
-
-            $startingPlayer = $match->players->filter(function($item) use($startingPlayerId) {
-                return $item->id == $startingPlayerId;
-            })->first();
-
-            $match->setStartingPlayer($startingPlayer);
-            $match->save();
-        } else {
-            $startingPlayerId = $match->startingPlayer->id;
-        }
+        $startingPlayerId = $match->startingPlayer->id;
 
         if (!isset($playerRounds[$startingPlayerId])) $playerRounds[$startingPlayerId] = array();
 
@@ -195,14 +225,25 @@ class MatchController extends Controller
         // Check if the Match is finished
         $lastGame = $games->last();
         $matchFinished = $this->gameIsFinished($lastGame->gameRounds);
-        if ($matchFinished == true) {
-            $this->finishMatch($match, $now);
-        }
-
         $message = sprintf("%s %s: %s.", $currentGameRound->player->name, Lang::get('match.rolled'), $this->getRollMessage($currentGameRound));
 
+        if ($matchFinished == true) {
+            $this->finishMatch($match, $now);
+            // Broadcast Match finished
+            $message = Lang::get('match.match_ended');
+            Event::fire(new UserRolled($match->unique_identifier, "", "", $message));
+        } else {
+            // Find Next Player and send out broadcast
+            $nextPlayer = $this->getNextPlayer($match, $playerRounds, $currentGameRound);
+            Event::fire(new UserRolled($match->unique_identifier, $nextPlayer->unique_identifier, $nextPlayer->name, $message));
+        }
+
         // Go back to the Match
-        return redirect()->route('active_match', ['match_id' => $match->id])->with('success', $message);
+        if ($playerIdentifier) {
+            return redirect()->route('active_match', ['match_id' => $match->id, 'player_identifier' => $playerIdentifier]);
+        } 
+        
+        return redirect()->route('active_match', ['match_id' => $match->id])->with('success', $message); 
     }
 
     /**
@@ -237,27 +278,74 @@ class MatchController extends Controller
                 }
             }
         }
+
+        // Shuffle a Player that starts
+        $startingPlayerId = $this->shufflePlayer($match->players);
+
+        $startingPlayer = $match->players->filter(function($item) use($startingPlayerId) {
+            return $item->id == $startingPlayerId;
+        })->first();
+                
+        $match->setStartingPlayer($startingPlayer);
+        $match->save();
+
+        Event::fire(new UserRolled($match->unique_identifier, $startingPlayer->unique_identifier, $startingPlayer->name, false));
     }
 
     /**
      * Check if Match is valid, session and if it has ended
      */
-    private function validateMatch($match, $request)
+    private function validateMatch($match, $request, $playerIdentifier)
     {
         $unique_identifier = $request->session()->get('unique_identifier', '');
         $status = array('error' => '', 'message' => '');
+
+        $player = $match->players->filter(function($item) use($playerIdentifier) {
+            return $item->unique_identifier == $playerIdentifier;
+        })->first();
         
         if (!empty($match->end_datetime)) {
             // Check if Match has ended
             $status['error'] = 'ended';
             $status['message'] = Lang::get('errors.match_has_ended');
         } else if (empty($unique_identifier) || $unique_identifier != $match->unique_identifier) {
-            // Check if this Match belongs to our current Session
-            $status['error'] = 'in_progress';
-            $status['message'] = Lang::get('errors.match_in_progress');
-        }
+            if (!$player) {
+                // Check if this Match belongs to our current Session
+                $status['error'] = 'in_progress';
+                $status['message'] = Lang::get('errors.match_in_progress');
+            }
+        } 
 
         return $status;
+    }
+
+    /**
+     * Find next Player
+     */
+    private function getNextPlayer($match, $playerRounds, $currentGameRound)
+    {
+        // Get next GameRound for this Player
+        $nextGameRound = $this->findNextGameRound($playerRounds, $currentGameRound);
+
+        // If "Strike" is rolled, and this is not the last game, we need to fetch next Game
+        if ($currentGameRound->type == 2 && $currentGameRound->game->number != 10) $nextGameRound = false;
+
+        // In the last Game and middle frame we need to roll "Spare" or "Strike" to continue
+        if ($currentGameRound->game->number == 10 && $currentGameRound->number == 2) {
+            if ($currentGameRound->type != 2 && $currentGameRound->type != 1) {
+                $nextGameRound = false;
+            }
+        }
+
+        // If don't find next GameRound for this Game, Just return the other PLayer
+        if (!$nextGameRound) {
+            $nextPlayer = $match->players->filter(function($player) use ($currentGameRound) {
+                if($player->id != $currentGameRound->player_id) return $player; 
+            })->first();
+        } else {       
+            $nextPlayer = $nextGameRound->player;
+        }
+        return $nextPlayer;
     }
 
     /**
@@ -361,7 +449,7 @@ class MatchController extends Controller
             if ($round->player_id == $player->id) {
                 // The score is not default
                 if ($round->created_at != $round->updated_at) {
-                    $score += $round->score;
+                    $score += (is_numeric($round->score) ? $round->score : 0);
                 } else {
                      // Empty space default
                     $score = "&emsp;";
@@ -449,7 +537,7 @@ class MatchController extends Controller
         $gameRound->score = random_int($minValue, $maxValue);
 
         // TODO TEST
-        // $gameRound->score = $this->testIt($gameRound, 1);
+        //$gameRound->score = $this->testIt($gameRound, 1);
         // TODO END TEST
 
         // Check if "Spare", "Strike", "Violation" or "Regular"

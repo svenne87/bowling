@@ -20,3 +20,41 @@ Vue.component('example-component', require('./components/ExampleComponent.vue'))
 const app = new Vue({
     el: '#app'
 });
+
+// Listen for Pusher Event
+Echo.channel('user-rolled')
+    .listen('UserRolled', (e) => {
+        // Only check this if we are playing on different computers
+        if ( $('#match-identifier').length) {
+            var matchIdentifier = $('#match-identifier').val();
+            var playerIdentifier = $('#player-identifier').val(); // In form
+
+            if (e.matchIdentifier) {
+                // Since this is a public channel, listen and see if the information actually concern the current match.
+                // No secret information here
+                if (e.matchIdentifier == matchIdentifier) {
+                     // Just reload for now, when it's this players turn ( The form is not visisble )
+                    if (!playerIdentifier) {
+                        var player = $('#player').val();
+
+                        if (!e.playerIdentifier) location.reload();
+
+                        if (player == e.playerIdentifier) location.reload();
+
+                        if (e.message) {
+                            $('#message').text(e.message);
+                        }
+                    }
+
+                    if (e.playerName) {
+                        // Set next player
+                        $('#next-player').text(e.playerName);
+                    } else {
+                        // Match ended
+                        $('#next-player').hide();
+                        $('#match-ended').show();
+                    }
+                }
+            } 
+        } 
+    });

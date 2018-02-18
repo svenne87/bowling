@@ -65,22 +65,35 @@
             <div class="row">
                 <div class="col-md-12 col-lg-10 offset-lg-1">
                     @if (!$matchHasEnded)
+                        <div class="match-result-details-container">
+                            <p class="text-muted text-center"><strong><span id="message"></span></strong></p>
+                            <p class="text-muted text-center"><strong>{{ Lang::get('match.next_player') }}:</strong> <span id="next-player">{{ $currentPlayer->name }}</span></p>
+                        </div>
                         <div class="action-container">
-                            {!! Form::model($match, [
-                                'method' => 'PATCH',
-                                'url' => ['/match', $match->id],
-                                'class' => 'form-horizontal'
-                            ]) !!}
+                            <input type="hidden" name="match-identifier" id="match-identifier" value="{{ $match->unique_identifier }}">
+                            <input type="hidden" name="player" id="player" value="{{ ($playerIdentifier ? $playerIdentifier : '')}}">
 
-                                @include ('templates.match.action-form')
+                            @if (!$activePlayer || $activePlayer->id == $currentPlayer->id)
+                                {!! Form::model($match, [
+                                    'method' => 'PATCH',
+                                    'url' => ['/match', $match->id],
+                                    'class' => 'form-horizontal'
+                                ]) !!}
+
+                                    @include ('templates.match.action-form')
                         
-                            {!! Form::close() !!}
+                                {!! Form::close() !!}
+                            @endif
                         </div>
                     @else
                         <div class="match-result-details-container">
-                            <p class="text-muted text-center">{{ Lang::get('match.match_ended') }}</p>
+                            <p id="match-ended" class="text-muted text-center">{{ Lang::get('match.match_ended') }}</p>
+                            <h3 class="text-center">{{ Lang::get('match.winner') }}: {{ $match->winner->name }}</h3>
                         </div>
                     @endif
+                    <div id="match-ended" style="display:none;" class="match-result-details-container">
+                        <p class="text-muted text-center">{{ Lang::get('match.match_ended') }}</p>
+                    </div>
                 </div>
             </div>
         @endif

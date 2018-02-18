@@ -20,10 +20,10 @@ Route::get('/match', ['uses' => 'Match\MatchController@index', 'as' => 'match_in
     return view('templates.match.index');
 });
 
-Route::get('/match/{matchId}', ['uses' => 'Match\MatchController@activeMatch', 'as' => 'active_match'], function () {
+Route::get('/match/{matchId}/{player_identifier?}', ['uses' => 'Match\MatchController@activeMatch', 'as' => 'active_match'], function () {
     return view('templates.match.match');
 });
 
 Route::post('/match', 'Match\MatchController@store');
 
-Route::patch('/match/{match_id}', 'Match\MatchController@update');
+Route::patch('/match/{match_id}/{player_identifier?}', 'Match\MatchController@update');

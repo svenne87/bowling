@@ -19,7 +19,9 @@ return [
     'action' => 'Roll',
     'rolled' => 'rolled',
     'match_ended' => 'This match has ended.',
+    'winner' => 'Winner',
     'violation' => 'Violation',
     'strike' => 'Strike',
     'spare' => 'Spare',
+    'next_player' => 'Next player',
 ];
