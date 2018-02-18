@@ -23,6 +23,7 @@ class CreateGameRoundsTable extends Migration
                 $table->integer('player_id')->unsigned();
                 $table->foreign('player_id')->references('id')->on('players');
                 $table->integer('score')->default(0);
+                $table->integer('award_count')->default(0);
                 $table->integer('type')->default(0)->comment('0 = regular, 1 = spare, 2 = strike, 3 = violation. 4 = no_action');
                 $table->timestamps();
             });

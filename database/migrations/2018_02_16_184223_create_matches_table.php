@@ -20,6 +20,7 @@ class CreateMatchesTable extends Migration
                 $table->string('unique_identifier');
                 $table->string('display_score')->nullable();
                 $table->integer('winner_player_id')->unsigned()->default(0);
+                $table->integer('starting_player_id')->unsigned()->default(0);          
                 $table->dateTime('start_datetime')->nullable();
                 $table->dateTime('end_datetime')->nullable();
                 $table->timestamps();

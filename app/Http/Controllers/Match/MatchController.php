@@ -45,23 +45,7 @@ class MatchController extends Controller
         }
 
         // Keep the result in a separate array to avoid calculations in the view
-        $results = array();
-
-        $match->players->each(function($player) use ($match, &$results) {
-            $totalScore = 0;
-
-            $match->games->each(function($game) use (&$results, &$totalScore, $player) {
-                if (!isset($results[$player->id])) $results[$player->id] = array();
-
-                // Increase the score if we are not showing default symbol instead of score.
-                $score = $this->getResult($game, $player);
-                $totalScore += (is_numeric($score) ? $score : 0); 
-
-                // Make sure space symbol get's shown before Match starts
-                $results[$player->id][$game->number] = (is_numeric($score) ? $totalScore : $score);
-            });
-        });
-
+        $results = $this->getMatchResults($match);
         return view('templates.match.match', compact('match', 'results', 'matchHasEnded'));
     }
 
@@ -142,13 +126,6 @@ class MatchController extends Controller
             }
         })->first();
 
-        if (!$currentGame) {
-            // The Match is finished
-            $match->end_datetime = $now->format('Y-m-d H:i:s');
-            $match->save();
-            return redirect()->route('active_match', ['match_id' => $match->id]);
-        }
-
         // Get all GameRounds, for current Game
         $gameRounds = $currentGame->gameRounds;
 
@@ -156,10 +133,27 @@ class MatchController extends Controller
         $playerRounds = array();
         $gameStarted = false;
 
-        $match->players->each(function($player) use (&$playerRounds, &$gameStarted , $gameRounds) {
+        // First Game and first set of GameRounds
+        if ($currentGame->number == 1) {
+            // Shuffle a Player that starts
+            $startingPlayerId = $this->shufflePlayer($match->players);
+
+            $startingPlayer = $match->players->filter(function($item) use($startingPlayerId) {
+                return $item->id == $startingPlayerId;
+            })->first();
+
+            $match->setStartingPlayer($startingPlayer);
+            $match->save();
+        } else {
+            $startingPlayerId = $match->startingPlayer->id;
+        }
+
+        if (!isset($playerRounds[$startingPlayerId])) $playerRounds[$startingPlayerId] = array();
+
+        $match->players->each(function($player) use (&$playerRounds, &$gameStarted, $gameRounds) {
             if (!isset($playerRounds[$player->id])) $playerRounds[$player->id] = array();
             
-            $gameRounds->filter(function ($gameRound) use (&$playerRounds, &$gameStarted , $player) {           
+            $gameRounds->filter(function($gameRound) use (&$playerRounds, &$gameStarted, $player) {           
                 if ($gameRound->player_id == $player->id) {
                     $playerRounds[$player->id][$gameRound->number] = $gameRound;
                 }
@@ -167,26 +161,15 @@ class MatchController extends Controller
                 // Check if Game is started
                 if ($gameRound->created_at != $gameRound->updated_at) $gameStarted = true;
             });
+            
         });
        
-        if (!$gameStarted && $currentGame->number == 1) {
-            // This is the first GameRound of the first Game, shuffle a Player that starts
-            $currentPlayerId = $this->shufflePlayer($playerRounds); 
-
-            // Find active GameRound, pass in array since function expects array in array
-            $activeRounds = $playerRounds[$currentPlayerId];
-           
-            // TODO issue when player two starts...
-
-            $currentGameRound = $this->findActiveGameRound(array($activeRounds));
-        } else {
-            // Find active round
-            $currentGameRound = $this->findActiveGameRound($playerRounds);
-        }
+        $currentGameRound = $this->findActiveGameRound($playerRounds); 
 
         // Try to find previous GameRound
         $previousGameRound = $this->findPreviousGameRound($playerRounds, $currentGameRound);
-   
+
+        // Do actions
         $currentGameRound = $this->performRollAction($currentGameRound, $previousGameRound);
         
         // Touch will ensure update even if we score 0
@@ -208,16 +191,13 @@ class MatchController extends Controller
             $currentGame->end_datetime = $now->format('Y-m-d H:i:s');
             $currentGame->save();
         }
-
-        // TODO Will need to refetch gameRounds here?? If strike at end?
-        // TODO Present more details...
-        // TODO Skip the last "Roll" to see "Match has ended"...  !$currentGame, gör en annan koll innan vi retunerar här nere.
-        // TODO set Match winner
-        // TODO will cover if all is Strike?, missinh 70 points? Issiue wit hseveral strikes in a row...
-        // TODO test if all is Spare
-        // TODO could be done more elegant...
-        // Test if last roll should be locked, is i
-        // Bugg om spelar nere börjar??
+        
+        // Check if the Match is finished
+        $lastGame = $games->last();
+        $matchFinished = $this->gameIsFinished($lastGame->gameRounds);
+        if ($matchFinished == true) {
+            $this->finishMatch($match, $now);
+        }
 
         $message = sprintf("%s %s: %s.", $currentGameRound->player->name, Lang::get('match.rolled'), $this->getRollMessage($currentGameRound));
 
@@ -283,10 +263,17 @@ class MatchController extends Controller
     /**
      * Shuffle a starting Player
      */
-    private function shufflePlayer($playerRounds) 
+    private function shufflePlayer($players) 
     {
-        $minPlayersKey = min(array_keys($playerRounds));
-        $maxPlayersKey =  max(array_keys($playerRounds));
+        $playerIds = [];
+
+        $players->each(function ($player) use (&$playerIds) { 
+            $playerIds[$player->id] = [$player->id];
+        });
+
+        $minPlayersKey = min(array_keys($playerIds));
+        $maxPlayersKey =  max(array_keys($playerIds));
+
         return random_int($minPlayersKey, $maxPlayersKey);
     }
 
@@ -295,8 +282,8 @@ class MatchController extends Controller
      */
     private function findActiveGameRound($playerRounds) 
     {
-        foreach($playerRounds as $key => $number) {
-            foreach($number as $gameRound) {
+        foreach ($playerRounds as $key => $number) {
+            foreach ($number as $gameRound) {
                 // First not modified GameRound
                 if ($gameRound->created_at == $gameRound->updated_at) return $gameRound;
             }
@@ -351,12 +338,11 @@ class MatchController extends Controller
      */
     private function gameIsFinished($gameRounds) 
     {
+        $result = true;
+
         $gameRounds->filter(function ($gameRound) use (&$result) {
             if ($gameRound->created_at == $gameRound->updated_at) {
                 $result = false;
-                return;
-            } else {
-                $result = true;
             }
         });
 
@@ -387,6 +373,64 @@ class MatchController extends Controller
     }
 
     /**
+     * Get score for a Match
+     */
+    private function getMatchResults($match) 
+    {
+        $results = array();
+
+        $match->players->each(function($player) use ($match, &$results) {
+            $totalScore = 0;
+
+            $match->games->each(function($game) use (&$results, &$totalScore, $player) {
+                if (!isset($results[$player->id])) $results[$player->id] = array();
+
+                // Increase the score if we are not showing default symbol instead of score.
+                $score = $this->getResult($game, $player);
+                $totalScore += (is_numeric($score) ? $score : 0); 
+
+                // Make sure space symbol get's shown before Match starts
+                $results[$player->id][$game->number] = (is_numeric($score) ? $totalScore : $score);
+            });
+        });
+
+        return $results;
+    }
+
+     /**
+     * Set Match as finished
+     */
+    private function finishMatch($match, $now) 
+    {
+        $playerResults = array();
+
+        $match->players->each(function($player) use ($match, &$playerResults) {
+            $playerResults[$player->id] = 0;
+            
+            $match->games->each(function($game) use (&$playerResults, $player) {
+                $score = $this->getResult($game, $player);
+                $playerResults[$player->id] += $score;
+            });
+        });
+
+        // Will be several values if tied
+        $winnerIds = array_keys($playerResults, max($playerResults));
+
+        if (count($winnerIds) == 1) {
+            $winner = $match->players->filter(function($item) use($winnerIds) {
+                return $item->id == array_values($winnerIds)[0];
+            })->first();
+
+            $match->setWinner($winner);
+        }
+
+        // We only handle two players, set winner and final score
+        $match->display_score = array_values($playerResults)[0] . "/" . array_values($playerResults)[1];
+        $match->end_datetime = $now->format('Y-m-d H:i:s');
+        $match->save();
+    }
+
+    /**
      * Perform a roll action
      */
     private function performRollAction(&$gameRound, &$previousGameRound = false) 
@@ -402,7 +446,7 @@ class MatchController extends Controller
         $gameRound->score = random_int($minValue, $maxValue);
 
         // TODO TEST
-         $gameRound->score = $this->testIt($gameRound, 1);
+        // $gameRound->score = $this->testIt($gameRound, 1);
         // TODO END TEST
 
         // Check if "Spare", "Strike", "Violation" or "Regular"
@@ -427,6 +471,7 @@ class MatchController extends Controller
         if ($currentGameRound->game->number == 10) {
             if ($currentGameRound->number > 1) {
                 $previousGameRound = $this->findPreviousGameRound($playerRounds, $currentGameRound);
+                
                 // If this is not a Spare and the first GameRound was not a Strike
                 // We should "lock" the last GameRound
                 // Since we are checking GameRound->number > 1, previosGameRound will exist
@@ -507,7 +552,6 @@ class MatchController extends Controller
     {
         $thisGameNumber = $gameRound->game->number;
         $allGames = $gameRound->game->match->games;
-        $previousWasStrike = false;
 
         // Find previous Game
         $previousGame = $allGames->firstWhere('number', ($thisGameNumber - 1));
@@ -521,35 +565,37 @@ class MatchController extends Controller
                     if ($gameRound->number == 1) {
                         // Award score for this roll
                         $item->score += $gameRound->score;
+                        $item->award_count += 1;
                         $item->save();
                     }
                 } else if ($item->type == 2) {
                     // "Strike"
-                    $previousWasStrike = true;
                     if ($gameRound->number <= 2) { 
-                        // Award score for these roll's
+                        // Award score for these roll's and keep track of times awarded
                         $item->score += $gameRound->score;
+                        if ($gameRound->type != 4) $item->award_count += 1;
                         $item->save();
                     }
                 }
             });
-        }
 
-        // TODO clean up, will also need to chewck if strik. not working for test 2) 
-        if ($previousGame) {
+            // Will keep tack of times awarded, if you roll a "Strike", you will need to check previous, previous game (since strike is a singel roll).
             // Find previous, previous Game
-            $previousPreviousGame = $allGames->firstWhere('number', ($previousGame->number - 2));
+            $previousPreviousGame = $allGames->firstWhere('number', ($previousGame->number - 1));
 
             if ($previousPreviousGame) {
                 $gameRoundsForPlayer = $previousPreviousGame->gameRounds->where('player_id', $gameRound->player_id);
     
-                $gameRoundsForPlayer->each(function(&$item) use ($gameRound, $previousGame) {
+                $gameRoundsForPlayer->each(function(&$item) use ($gameRound, $previousGame) { 
                     if ($item->type == 2) {
                         // "Strike"
-                        if ($gameRound->number <= 2) {  // 1  
-                            // Award score for these roll's
-                            $item->score += $gameRound->score;
-                            $item->save();
+                        if ($gameRound->number == 1) {
+                            if ($item->award_count < 2) {
+                                // Award score for this roll
+                                $item->score += $gameRound->score;
+                                $item->award_count += 1;
+                                $item->save();
+                            }
                         }
                     }
                 });
