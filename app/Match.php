@@ -90,4 +90,12 @@ class Match extends Model
         $this->starting_player_id = $player->id;
         $this->save();
     }
+
+    /**
+     * Used to display Ranking
+     */
+    public function getRankAttribute()
+    {
+        return $this->newQuery()->where('winner_score', '>=', $this->winner_score)->count();
+    }
 }
