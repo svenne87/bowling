@@ -12,7 +12,7 @@ class Match extends Model
      * @var array
      */
     protected $fillable = [
-        'name', 'winner_player_id', 'starting_player_id', 'unique_identifier', 'display_score', 'start_datetime', 'end_datetime'
+        'name', 'winner_player_id', 'starting_player_id', 'unique_identifier', 'display_score', 'winner_score', 'start_datetime', 'end_datetime'
     ];
 
     /**
@@ -53,18 +53,20 @@ class Match extends Model
      * @return \App\Player
      */
     public function winner() {
-        return $this->belongsTo(Player::class);
+        return $this->belongsTo(Player::class, 'winner_player_id');
     }
 
     /**
      * Set the Winner (Player) for this Match.
      *
      * @param Player $player
+     * @param mixed $score
      *
      * @return mixed
      */
-    public function setWinner(Player $player) {
+    public function setWinner(Player $player, $score) {
         $this->winner_player_id = $player->id;
+        $this->winner_score = $score;
         $this->save();
     }
 
@@ -74,7 +76,7 @@ class Match extends Model
      * @return \App\Player
      */
     public function startingPlayer() {
-        return $this->belongsTo(Player::class);
+        return $this->belongsTo(Player::class, 'starting_player_id');
     }
 
     /**
