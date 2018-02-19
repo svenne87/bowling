@@ -22,4 +22,5 @@ return [
     'ended' => 'Ended',
     'winner' => 'Winner',
     'tied' => 'Tied',
+    'no_matches' => 'No previous matches found, start match below',
 ];
