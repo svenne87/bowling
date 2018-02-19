@@ -28,4 +28,5 @@ return [
     'waiting_for_player' => 'Waiting for player...',
     'join_here' => 'Join here',
     'player_joined' => 'player joined',
+    'no_matches' => 'No previous matches found, start match below',
 ];
