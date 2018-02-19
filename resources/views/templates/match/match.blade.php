@@ -1,13 +1,13 @@
 @extends('welcome')
 @section('content')
 <div class="container">
-    <div class="row">
-        <div class="col-md-12">
-            <h2 class="text-center">{{ $match->name }}</h2>
-        </div>
-    </div>
     <div class="match-info-container">
-        @if ($match->players->count() > 1)
+        @if ($match->players->count() > 1 && !$waitingForJoin)
+            <div class="row">
+                <div class="col-md-12">
+                    <h2 class="text-center">{{ $match->name }}</h2>
+                </div>
+            </div>
             <div class="row">
                 @foreach ($match->players as $player)
                     <div class="col-md-12 col-lg-6">
@@ -96,6 +96,23 @@
                     </div>
                 </div>
             </div>
+        @else
+            @if ($activePlayer->id != $currentPlayer->id)
+                {!! Form::model($match, [
+                    'method' => 'PATCH',
+                    'url' => ['/match-join', $match->id],
+                    'class' => 'form-horizontal'
+                ]) !!}
+
+                @include ('templates.match.join-form')
+                        
+            {!! Form::close() !!}
+            @else
+                <input type="hidden" name="match-identifier" id="match-identifier" value="{{ $match->unique_identifier }}">
+                <input type="hidden" name="player" id="player" value="{{ ($playerIdentifier ? $playerIdentifier : '')}}">
+                <h2 class="text-center">{{ Lang::get('match.waiting_for_player') }}</h2>
+                <p class="text-center">{{ Lang::get('match.join_here') }}: <a href="{{ $match->players->where('name', '')->first()->getJoinUrl($match) }}">{{ $match->players->where('name', '')->first()->getJoinUrl($match) }}</a></p>
+            @endif
         @endif
     </div>
 </div>

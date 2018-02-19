@@ -21,6 +21,20 @@ const app = new Vue({
     el: '#app'
 });
 
+// Hide field if we select challegen friend
+if ($("#remote-play").length) {
+    $("#remote-play").on('change', function () {
+        if ($(this).is(':checked')) {
+            $("[name='player_two']").prop('required', false);
+            $("[name='player_two']").prop('disabled', true);
+            $("[name='player_two']").val("");
+        } else {
+            $("[name='player_two']").prop('required', true);
+            $("[name='player_two']").prop('disabled', false);
+        }
+    });
+}
+
 // Listen for Pusher Event
 Echo.channel('user-rolled')
     .listen('UserRolled', (e) => {

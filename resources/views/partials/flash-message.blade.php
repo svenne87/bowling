@@ -32,7 +32,7 @@
             @if ($errors->any())
                 <div class="alert alert-danger">
 	                <button type="button" class="close" data-dismiss="alert">×</button>	
-	                {{ Lang::get('error.form_error') }}
+	                {{ Lang::get('errors.form_error') }}
                 </div>
             @endif
         </div>

@@ -21,5 +21,7 @@ return [
     '500_messagee' => 'The request could not be completed. Please try again.',
     'different_names' => 'Please don\'t use the same name',
     'match_in_progress' => 'This Match is currently in progress with other Players',
-    'match_has_ended' => 'This Match has ended.'
+    'match_has_ended' => 'This Match has ended.',
+    'can_find_game' => 'We can\'t ffind your active game!',
+    'form_error' => 'Please check errors below',
 ];

@@ -37,5 +37,18 @@ class Player extends Model
         return $this->matches()->save($match);
     }
 
+     /**
+     * Return URL to join Match.
+     *
+     * @param Match $match
+     *
+     * @return mixed
+     */
+    public function getJoinUrl($match)
+    {
+        return url('/match/'. $match->id . '/' . $this->unique_identifier);
+
+    }
+
 
 }

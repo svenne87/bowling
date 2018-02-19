@@ -27,3 +27,5 @@ Route::get('/match/{matchId}/{player_identifier?}', ['uses' => 'Match\MatchContr
 Route::post('/match', 'Match\MatchController@store');
 
 Route::patch('/match/{match_id}/{player_identifier?}', 'Match\MatchController@update');
+
+Route::patch('/match-join/{match_id}/{player_identifier?}', 'Match\MatchController@joinMatch');

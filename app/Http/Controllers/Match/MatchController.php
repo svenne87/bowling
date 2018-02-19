@@ -52,6 +52,13 @@ class MatchController extends Controller
             return $item->unique_identifier == $playerIdentifier;
         })->first();
 
+        // If not all players have set name we can't start
+        $waitingForJoin = false;
+
+        $match->players->each(function($player) use(&$waitingForJoin) {
+            if (empty($player->name)) $waitingForJoin = true;
+        });
+
         if (!$matchHasEnded) {
             // Games sorted 1 - 10
             $games = $match->games->sortBy('number');
@@ -88,7 +95,7 @@ class MatchController extends Controller
 
         // Keep the result in a separate array to avoid calculations in the view
         $results = $this->getMatchResults($match);
-        return view('templates.match.match', compact('match', 'results', 'matchHasEnded', 'currentPlayer', 'activePlayer', 'playerIdentifier'));
+        return view('templates.match.match', compact('match', 'results', 'matchHasEnded', 'currentPlayer', 'activePlayer', 'playerIdentifier', 'waitingForJoin'));
     }
 
    /**
@@ -100,7 +107,7 @@ class MatchController extends Controller
      */
     public function store(Request $request)
     {
-        $this->validate($request, ['player_one' => 'required||min:1|max:80', 'player_two' => 'required||min:1|max:80']);
+        $this->validate($request, ['player_one' => 'required|min:1|max:80', 'player_two' => 'max:80']);
 
         // We don't want two players with the same name in a Match
         if ($request->get('player_one') == $request->get('player_two')) return redirect('match')->with('error', Lang::get('errors.different_names'));
@@ -109,7 +116,14 @@ class MatchController extends Controller
         $playerOneValues = array('name' => trim($request->get('player_one')), 'unique_identifier' => md5(microtime() . trim($request->get('player_one'))));
         $playerOne = Player::create($playerOneValues); 
 
-        $playerTwoValues = array('name' => trim($request->get('player_two')), 'unique_identifier' => md5(microtime() . trim($request->get('player_two'))));
+        if ($request->has('remote_play') && $request->get('remote_play') == 1) {
+            $playerTwoName = "";
+        } else {
+            $playerTwoName = trim($request->get('player_two'));
+            $this->validate($request, ['player_two' => 'required|min:1|max:80']);
+        }
+
+        $playerTwoValues = array('name' => $playerTwoName, 'unique_identifier' => md5(microtime() . $playerTwoName));
         $playerTwo = Player::create($playerTwoValues); 
 
         $now = Carbon::now('Europe/Stockholm');
@@ -128,7 +142,61 @@ class MatchController extends Controller
         $request->session()->put('unique_identifier', $matchValues['unique_identifier']);
 
         // Go to the Match
+        if ($request->has('remote_play') && $request->get('remote_play') == 1) {
+            return redirect()->route('active_match', ['match_id' => $match->id, 'player_identifer' => $playerOne->unique_identifier]);
+        } 
         return redirect()->route('active_match', ['match_id' => $match->id]);
+    }
+
+    /**
+     * Update a resource in storage.
+     *
+     * @param  \Illuminate\Http\Request $request
+     *
+     * @return void
+     */
+    public function joinMatch(Request $request, $matchId)
+    {
+        // Get the current Match
+        $match = Match::findOrFail($matchId);
+        $now = Carbon::now('Europe/Stockholm');
+        $playerIdentifier = $request->get('player_identifier');
+        
+        $status = $this->validateMatch($match, $request, $playerIdentifier);
+                
+        // Validate Match
+        if (!empty($status['error'])) {
+            if ($status['error'] == 'ended') {
+                return redirect()->route('active_match', ['match_id' => $match->id]);
+            } else if ($status['error'] == 'in_progress') {
+                return redirect('match')->with('error', Lang::get('errors.match_in_progress'));
+            }
+        }
+
+        $this->validate($request, ['player' => 'required|min:1|max:80']);
+        $sameName = false;
+
+        $match->players->each(function($player) use ($request, &$sameName) {
+            // We don't want two players with the same name in a Match
+            if ($request->get('player') == $player->name) $sameName = true;   
+        });
+        if ($sameName) return redirect()->route('active_match', ['match_id' => $match->id, 'player_identifier' => $playerIdentifier])->with('error', Lang::get('errors.different_names'));
+    
+        $player = $match->players->filter(function($player) use ($playerIdentifier) {
+            // We don't want two players with the same name in a Match
+            if ($player->unique_identifier == $playerIdentifier) return $player; 
+        })->first();
+
+        if (!$player) return redirect()->route('active_match', ['match_id' => $match->id, 'player_identifier' => $playerIdentifier])->with('error', Lang::get('errors.can_find_game'));
+        
+        $player->name = trim($request->get('player'));
+        $player->save();
+
+        $match->name .= $player->name;
+        $match->save();
+
+        Event::fire(new UserRolled($match->unique_identifier, "", "", $player->name .' '. Lang::get('match.player_joined')));
+        return redirect()->route('active_match', ['match_id' => $match->id, 'player_identifier' => $playerIdentifier]);
     }
 
     /**

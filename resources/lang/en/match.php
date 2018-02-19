@@ -24,4 +24,8 @@ return [
     'strike' => 'Strike',
     'spare' => 'Spare',
     'next_player' => 'Next player',
+    'remote_play' => 'Challenge a friend?',
+    'waiting_for_player' => 'Waiting for player...',
+    'join_here' => 'Join here',
+    'player_joined' => 'player joined',
 ];
