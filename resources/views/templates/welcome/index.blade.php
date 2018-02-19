@@ -34,9 +34,9 @@
                     </div>
                     <div class="pagination"> {!! $matches->render() !!} </div>
                 </div>
-            @endif
-            <h2 class="text-center">{{ Lang::get('basic.no_matches') }}</h2>   
             @else
+                <h2 class="text-center">{{ Lang::get('basic.no_matches') }}</h2>   
+            @endif
             <div class="text-center">
                     <a class="btn btn-primary mt-5 px-5 mb-5" href="{{ url('/match') }}" title="{{ Lang::get('basic.play') }}">{{ Lang::get('basic.play') }}</a>
             </div>
