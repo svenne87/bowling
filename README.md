@@ -1,6 +1,8 @@
 # Bowling
 
 Bowling game in Laravel.
+ 
+* [Details and thoughts](https://github.com/svenne87/bowling/wiki/Design-and-thoughts/)
 
 ### Prerequisites
 
