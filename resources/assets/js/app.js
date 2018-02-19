@@ -54,10 +54,13 @@ Echo.channel('user-rolled')
                         if (!e.playerIdentifier) location.reload();
 
                         if (player == e.playerIdentifier) location.reload();
+                    }
 
-                        if (e.message) {
-                            $('#message').text(e.message);
-                        }
+                    if (e.message) {
+                        $('.message-container').show();
+                        $('#message').text(e.message);
+                    } else {
+                        $('.message-container').hide();
                     }
 
                     if (e.playerName) {

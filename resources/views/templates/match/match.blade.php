@@ -4,6 +4,18 @@
     <div class="match-info-container">
         @if ($match->players->count() > 1 && !$waitingForJoin)
             <div class="row">
+                <div class="col-md-8 offset-md-2">
+                    <div class="message-container" style="display:none;">
+                        @if (!Session::get('success'))
+                            <div class="alert alert-success alert-block">
+	                            <button type="button" class="close" data-dismiss="alert">×</button>	
+                                <strong><span id="message">&emsp;</span></strong>
+                            </div>
+                        @endif
+                    </div>
+                </div>
+            </div>
+            <div class="row">
                 <div class="col-md-12">
                     <h2 class="text-center">{{ $match->name }}</h2>
                 </div>
@@ -65,8 +77,7 @@
             <div class="row">
                 <div class="col-md-12 col-lg-10 offset-lg-1">
                     @if (!$matchHasEnded)
-                        <div class="match-result-details-container">
-                            <p class="text-muted text-center"><strong><span id="message"></span></strong></p>
+                        <div class="match-result-details-container">                       
                             <p class="text-muted text-center"><strong>{{ Lang::get('match.next_player') }}:</strong> <span id="next-player">{{ $currentPlayer->name }}</span></p>
                         </div>
                         <div class="action-container">
