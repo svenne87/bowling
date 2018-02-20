@@ -95,7 +95,7 @@ class MatchController extends Controller
     
         // Fix when Player two starts a remote play
         $firstPlayer = $match->players->first();
-        if ($waitingForJoin && $currentPlayer->id != $firstPlayer->id ) $currentPlayer = $firstPlayer;
+        if ($waitingForJoin && $currentPlayer->id != $firstPlayer->id) $currentPlayer = $firstPlayer;
         
         // Keep the result in a separate array to avoid calculations in the view
         $results = $this->getMatchResults($match);
