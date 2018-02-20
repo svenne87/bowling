@@ -348,15 +348,11 @@ class MatchController extends Controller
         }
 
         // Shuffle a Player that starts
-        $startingPlayerId = $this->shufflePlayer($match->players);
-
-        $startingPlayer = $match->players->filter(function($item) use($startingPlayerId) {
-            return $item->id == $startingPlayerId;
-        })->first();
-                
+        $players = $match->players;
+        $startingPlayer = $this->shufflePlayer($players);
         $match->setStartingPlayer($startingPlayer);
         $match->save();
-
+        
         Event::fire(new UserRolled($match->unique_identifier, $startingPlayer->unique_identifier, $startingPlayer->name, false));
     }
 
@@ -421,16 +417,8 @@ class MatchController extends Controller
      */
     private function shufflePlayer($players) 
     {
-        $playerIds = [];
-
-        $players->each(function ($player) use (&$playerIds) { 
-            $playerIds[$player->id] = [$player->id];
-        });
-
-        $minPlayersKey = min(array_keys($playerIds));
-        $maxPlayersKey =  max(array_keys($playerIds));
-
-        return random_int($minPlayersKey, $maxPlayersKey);
+        // Was issue with this on Heroku
+        return $players->random();
     }
 
     /**
